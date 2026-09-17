@@ -5,6 +5,7 @@ export type TraceEvent = {
   type: string
   timestamp: string
   data: Record<string, unknown>
+  source?: string
 }
 
 export type ToolCall = {
@@ -15,6 +16,8 @@ export type ToolCall = {
   status: 'running' | 'completed' | 'failed'
   startedAt: string
   durationMs?: number
+  output: string
+  outputTokens?: number
 }
 
 export type UsageCall = {
@@ -65,6 +68,7 @@ export function deriveTrace(events: TraceEvent[]) {
         model: typeof data.model === 'string' ? data.model : undefined,
         status: 'running',
         startedAt: event.timestamp,
+        output: '',
       })
     }
     if (event.type === 'tool.execution_complete' && typeof data.toolCallId === 'string') {
@@ -74,6 +78,8 @@ export function deriveTrace(events: TraceEvent[]) {
           ...existing,
           status: data.success === false ? 'failed' : 'completed',
           durationMs: new Date(event.timestamp).getTime() - new Date(existing.startedAt).getTime(),
+          output: typeof data.toolOutput === 'string' ? data.toolOutput : '',
+          outputTokens: typeof data.toolOutputTokens === 'number' ? data.toolOutputTokens : 0,
         })
       }
     }

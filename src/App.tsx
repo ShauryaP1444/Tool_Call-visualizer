@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
 import { cancelRun, createRun, streamRun } from './api'
+import type { AdoMcpConfig } from './api'
 import { deriveTrace } from './trace'
 import type { ToolCall, TraceEvent } from './trace'
+import BenchmarkPage from './BenchmarkPage'
 import './App.css'
 
 function Icon({ name, size = 18 }: { name: string; size?: number }) {
@@ -32,21 +34,39 @@ function ToolIcon({ call, small = false }: { call: ToolCall; small?: boolean }) 
 }
 
 function App() {
+  const [page, setPage] = useState<'trace' | 'benchmark'>(
+    window.location.hash === '#benchmarks' ? 'benchmark' : 'trace',
+  )
   const [query, setQuery] = useState('Explain how the main application flow works in this codebase')
-  const [repositoryPath, setRepositoryPath] = useState('C:\\Users\\shaparashar\\ToolChain-visualizer')
+  const [repositoryPath, setRepositoryPath] = useState('C:\\azure-devops-mcp')
   const [model, setModel] = useState('')
+  const [adoMcpMode, setAdoMcpMode] = useState<AdoMcpConfig['mode']>('compare')
+  const [adoOrganization, setAdoOrganization] = useState('sichauhan')
+  const [adoProject, setAdoProject] = useState('MyFirstProject')
+  const [adoRepository, setAdoRepository] = useState('azure-devops-remote-mcp')
+  const [adoBranch, setAdoBranch] = useState('master')
+  const [adoLocalPath, setAdoLocalPath] = useState('C:\\azure-devops-mcp')
+  const [submittedAdoMcpMode, setSubmittedAdoMcpMode] = useState<AdoMcpConfig['mode']>('compare')
+  const [selectedVariant, setSelectedVariant] = useState<'regular' | 'summary'>('regular')
   const [submittedQuery, setSubmittedQuery] = useState('')
   const [runId, setRunId] = useState('')
   const [events, setEvents] = useState<TraceEvent[]>([])
+  const [streamActive, setStreamActive] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [selectedCall, setSelectedCall] = useState<string | null>(null)
   const closeStream = useRef<(() => void) | null>(null)
-  const trace = useMemo(() => deriveTrace(events), [events])
+  const visibleEvents = useMemo(
+    () => submittedAdoMcpMode === 'compare'
+      ? events.filter((event) => event.source === selectedVariant)
+      : events,
+    [events, selectedVariant, submittedAdoMcpMode],
+  )
+  const trace = useMemo(() => deriveTrace(visibleEvents), [visibleEvents])
   const selected = trace.tools.find((call) => call.id === selectedCall)
   const inputTokens = trace.usage.reduce((sum, call) => sum + call.inputTokens, 0)
   const outputTokens = trace.usage.reduce((sum, call) => sum + call.outputTokens, 0)
   const sessionCost = trace.metrics?.totalPremiumRequestCost
-  const isActive = trace.status === 'starting' || trace.status === 'running'
+  const isActive = streamActive
 
   useEffect(() => () => closeStream.current?.(), [])
 
@@ -58,16 +78,35 @@ function App() {
     setRequestError('')
     setSelectedCall(null)
     setSubmittedQuery(query.trim())
+    setSubmittedAdoMcpMode(adoMcpMode)
+    setSelectedVariant('regular')
     try {
-      const id = await createRun(query.trim(), repositoryPath.trim(), model.trim())
+      const id = await createRun(query.trim(), repositoryPath.trim(), model.trim(), {
+        mode: adoMcpMode,
+        organization: adoOrganization.trim(),
+        project: adoProject.trim(),
+        repository: adoRepository.trim(),
+        branch: adoBranch.trim(),
+        localPath: adoLocalPath.trim(),
+      })
       setRunId(id)
-      setEvents([{ id: 'local-start', type: 'run.starting', timestamp: new Date().toISOString(), data: {} }])
+      setStreamActive(true)
+      setEvents(adoMcpMode === 'compare'
+        ? [
+            { id: 'regular-start', type: 'run.starting', timestamp: new Date().toISOString(), data: {}, source: 'regular' },
+            { id: 'summary-start', type: 'run.starting', timestamp: new Date().toISOString(), data: {}, source: 'summary' },
+          ]
+        : [{ id: 'run-start', type: 'run.starting', timestamp: new Date().toISOString(), data: {} }])
       closeStream.current = streamRun(
         id,
         (traceEvent) => setEvents((current) => current.some((item) => item.id === traceEvent.id) ? current : [...current, traceEvent]),
-        () => { closeStream.current = null },
+        () => {
+          closeStream.current = null
+          setStreamActive(false)
+        },
       )
     } catch (error) {
+      setStreamActive(false)
       setRequestError(error instanceof Error ? error.message : 'Unable to start run.')
     }
   }
@@ -87,8 +126,9 @@ function App() {
         <div className="brand"><span className="brand-mark"><Icon name="zap" size={16} /></span><span>Traceflow</span></div>
         <nav>
           <p className="nav-label">Workspace</p>
-          <a className="nav-item active" href="#overview"><Icon name="grid" /><span>Live trace</span></a>
-          <a className="nav-item" href="#events"><Icon name="history" /><span>Event log</span></a>
+          <button className={`nav-item ${page === 'trace' ? 'active' : ''}`} type="button" onClick={() => { setPage('trace'); window.location.hash = 'overview' }}><Icon name="grid" /><span>Live trace</span></button>
+          <button className={`nav-item ${page === 'benchmark' ? 'active' : ''}`} type="button" onClick={() => { setPage('benchmark'); window.location.hash = 'benchmarks' }}><Icon name="chart" /><span>Benchmarks</span></button>
+          {page === 'trace' && <a className="nav-item" href="#events"><Icon name="history" /><span>Event log</span></a>}
           <a className="nav-item" href="#usage"><Icon name="chart" /><span>Usage</span></a>
           <p className="nav-label second">Local</p>
           <a className="nav-item" href="#settings"><Icon name="settings" /><span>Connection</span></a>
@@ -106,7 +146,7 @@ function App() {
           <div className="header-actions"><span className={`live-dot ${isActive ? 'pulse' : ''}`} /> {isActive ? 'Tracing' : 'Ready'}</div>
         </header>
 
-        <div className="content" id="overview">
+        {page === 'benchmark' ? <BenchmarkPage /> : <div className="content" id="overview">
           <section className="intro">
             <div><h1>Agent trace explorer</h1><p>Observe Copilot tool calls and model usage for one complete codebase query.</p></div>
             {runId && <div className="run-meta"><span>RUN ID</span><button type="button" onClick={() => void navigator.clipboard.writeText(runId)}>{runId} <Icon name="copy" size={14} /></button></div>}
@@ -117,6 +157,25 @@ function App() {
               <label>Repository path<input value={repositoryPath} onChange={(event) => setRepositoryPath(event.target.value)} disabled={isActive} /></label>
               <label>Model (optional)<input value={model} onChange={(event) => setModel(event.target.value)} placeholder="Copilot default" disabled={isActive} /></label>
             </div>
+            <div className="field-grid mcp-grid">
+              <label>ADO MCP
+                <select value={adoMcpMode} onChange={(event) => setAdoMcpMode(event.target.value as AdoMcpConfig['mode'])} disabled={isActive}>
+                  <option value="none">Disabled</option>
+                  <option value="regular">Regular DevFabric toolset</option>
+                  <option value="summary">DevFabric toolset with summaries</option>
+                  <option value="compare">Compare regular vs. summaries</option>
+                </select>
+              </label>
+              <label>Azure DevOps organization<input value={adoOrganization} onChange={(event) => setAdoOrganization(event.target.value)} disabled={isActive || adoMcpMode === 'none'} /></label>
+            </div>
+            {adoMcpMode !== 'none' && <>
+              <div className="field-grid scope-grid">
+                <label>Azure DevOps project<input value={adoProject} onChange={(event) => setAdoProject(event.target.value)} disabled={isActive} /></label>
+                <label>Repository name or ID<input value={adoRepository} onChange={(event) => setAdoRepository(event.target.value)} disabled={isActive} /></label>
+                <label>Branch<input value={adoBranch} onChange={(event) => setAdoBranch(event.target.value)} disabled={isActive} /></label>
+              </div>
+              <label className="wide-field">ADO MCP source path<input value={adoLocalPath} onChange={(event) => setAdoLocalPath(event.target.value)} disabled={isActive} /></label>
+            </>}
             <label htmlFor="agent-query">Ask Copilot about this codebase</label>
             <div className="query-row">
               <textarea id="agent-query" value={query} onChange={(event) => setQuery(event.target.value)} rows={2} disabled={isActive} />
@@ -124,9 +183,15 @@ function App() {
                 ? <button className="run-button stop-button" type="button" onClick={() => void stopRun()}><Icon name="stop" /> Cancel</button>
                 : <button className="run-button" type="submit" disabled={!query.trim() || !repositoryPath.trim()}><Icon name="arrow" /> Run trace</button>}
             </div>
-            <div className="query-footer"><span>Copilot runs locally with tool permissions enabled</span><span>Usage is reported per model call, not per tool</span></div>
+            <div className="query-footer"><span>Copilot runs locally with tool permissions enabled</span><span>ADO tools use the selected MCP source</span></div>
             {(requestError || trace.error) && <p className="error-banner">{requestError || trace.error}</p>}
           </form>
+
+          {submittedAdoMcpMode === 'compare' && runId &&
+            <div className="comparison-tabs" role="tablist" aria-label="ADO MCP trace">
+              <button className={selectedVariant === 'regular' ? 'active' : ''} type="button" onClick={() => { setSelectedVariant('regular'); setSelectedCall(null) }}>Regular DevFabric MCP</button>
+              <button className={selectedVariant === 'summary' ? 'active' : ''} type="button" onClick={() => { setSelectedVariant('summary'); setSelectedCall(null) }}>DevFabric MCP + summaries</button>
+            </div>}
 
           <section className="stats-grid" id="usage">
             <article><span className="stat-icon purple"><Icon name="zap" /></span><div><p>Query cost</p><strong>{sessionCost?.toFixed(2) ?? '—'}</strong><span>Final premium-request cost</span></div></article>
@@ -149,19 +214,41 @@ function App() {
               ))}
               {isActive && trace.tools.length === 0 && <span className="waiting"><span className="spinner" /> Waiting for Copilot events...</span>}
             </div>
-            {selected && <div className="call-detail"><ToolIcon call={selected} small /><strong>{selected.name}</strong><span>{selected.detail}</span><span>{formatDuration(selected.durationMs)}</span><b>{selected.model ?? 'model unknown'}</b></div>}
+            {selected &&
+              <div className="call-detail">
+                <div className="call-detail-summary">
+                  <ToolIcon call={selected} small />
+                  <strong>{selected.name}</strong>
+                  <span>{selected.detail}</span>
+                  <span>{formatDuration(selected.durationMs)}</span>
+                  <b>{selected.model ?? 'model unknown'}</b>
+                </div>
+                <div className="call-output">
+                  <div><strong>Output</strong><span>{(selected.outputTokens ?? 0).toLocaleString()} tokens</span></div>
+                  <pre>{selected.output || 'No output was captured for this tool call.'}</pre>
+                </div>
+              </div>}
           </section>
 
           <div className="lower-grid" id="events">
             <section className="panel call-log">
-              <div className="panel-title"><div><h2>Tool call log</h2><p>Observed tool status and latency</p></div><span className="scope-note">Cost unavailable per tool</span></div>
-              <div className="table-head"><span>Tool</span><span>Duration</span><span>Status</span></div>
+              <div className="panel-title"><div><h2>Tool call log</h2><p>Click any call to inspect its complete output</p></div><span className="scope-note">Exact o200k output tokens</span></div>
+              <div className="table-head"><span>Tool</span><span>Duration</span><span>Tokens</span><span>Status</span></div>
               {trace.tools.length === 0 && <p className="empty-state">No tool calls observed yet.</p>}
               {trace.tools.map((call) => (
-                <button className="table-row" type="button" key={call.id} onClick={() => setSelectedCall(call.id)}>
-                  <span className="tool-cell"><ToolIcon call={call} small /><span><strong>{call.name}</strong><small>{call.detail}</small></span></span>
-                  <span>{formatDuration(call.durationMs)}</span><strong>{call.status}</strong>
-                </button>
+                <div className={`table-entry ${selectedCall === call.id ? 'selected' : ''}`} key={call.id}>
+                  <button className="table-row" type="button" onClick={() => setSelectedCall(selectedCall === call.id ? null : call.id)}>
+                    <span className="tool-cell"><ToolIcon call={call} small /><span><strong>{call.name}</strong><small>{call.detail}</small></span></span>
+                    <span>{formatDuration(call.durationMs)}</span>
+                    <span>{call.status === 'running' ? '—' : (call.outputTokens ?? 0).toLocaleString()}</span>
+                    <strong>{call.status}</strong>
+                  </button>
+                  {selectedCall === call.id &&
+                    <div className="table-output">
+                      <div><strong>Tool output</strong><span>{(call.outputTokens ?? 0).toLocaleString()} tokens</span></div>
+                      <pre>{call.output || 'No output was captured for this tool call.'}</pre>
+                    </div>}
+                </div>
               ))}
             </section>
 
@@ -177,7 +264,7 @@ function App() {
           </div>
 
           {(trace.answer || trace.status === 'completed') && <section className="panel answer-panel"><div className="panel-title"><div><h2>Final answer</h2><p>Copilot response for this run</p></div></div><div className="answer-content">{trace.answer || 'The run completed without a final text response.'}</div></section>}
-        </div>
+        </div>}
       </main>
     </div>
   )

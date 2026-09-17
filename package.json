@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@github/copilot-sdk": "^1.0.13",
+    "js-tiktoken": "^1.0.21",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },

@@ -1,10 +1,24 @@
 import type { TraceEvent } from './trace'
 
-export async function createRun(query: string, repositoryPath: string, model: string) {
+export type AdoMcpConfig = {
+  mode: 'none' | 'regular' | 'summary' | 'compare'
+  organization: string
+  project: string
+  repository: string
+  branch: string
+  localPath: string
+}
+
+export async function createRun(
+  query: string,
+  repositoryPath: string,
+  model: string,
+  adoMcp: AdoMcpConfig,
+) {
   const response = await fetch('/api/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ query, repositoryPath, model }),
+    body: JSON.stringify({ query, repositoryPath, model, adoMcp }),
   })
   const body = await response.json() as { runId?: string; error?: string }
   if (!response.ok || !body.runId) throw new Error(body.error ?? 'Unable to start run.')
