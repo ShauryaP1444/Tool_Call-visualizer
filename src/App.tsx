@@ -20,6 +20,8 @@ function Icon({ name, size = 18 }: { name: string; size?: number }) {
     chevron: <path d="m9 18 6-6-6-6" />,
     zap: <path d="M13 2 4 14h7l-1 8 9-12h-7z" />,
     stop: <rect x="6" y="6" width="12" height="12" rx="2" />,
+    moon: <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.65 17.65l1.42 1.42M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.65 6.35l1.42-1.42" /></>,
   }
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>
 }
@@ -34,6 +36,10 @@ function ToolIcon({ call, small = false }: { call: ToolCall; small?: boolean }) 
 }
 
 function App() {
+  const [darkMode, setDarkMode] = useState(() => {
+    const savedTheme = window.localStorage.getItem('traceflow-theme')
+    return savedTheme ? savedTheme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
   const [page, setPage] = useState<'trace' | 'benchmark'>(
     window.location.hash === '#benchmarks' ? 'benchmark' : 'trace',
   )
@@ -69,6 +75,11 @@ function App() {
   const isActive = streamActive
 
   useEffect(() => () => closeStream.current?.(), [])
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light'
+    document.documentElement.style.colorScheme = darkMode ? 'dark' : 'light'
+    window.localStorage.setItem('traceflow-theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
 
   async function runTrace(event: FormEvent) {
     event.preventDefault()
@@ -143,7 +154,18 @@ function App() {
       <main>
         <header className="topbar">
           <div className="breadcrumb"><span>Local Copilot</span><Icon name="chevron" size={14} /><strong>Live trace</strong></div>
-          <div className="header-actions"><span className={`live-dot ${isActive ? 'pulse' : ''}`} /> {isActive ? 'Tracing' : 'Ready'}</div>
+          <div className="header-actions">
+            <span className={`live-dot ${isActive ? 'pulse' : ''}`} /> {isActive ? 'Tracing' : 'Ready'}
+            <button
+              className="theme-toggle"
+              type="button"
+              onClick={() => setDarkMode((current) => !current)}
+              aria-label={`Switch to ${darkMode ? 'light' : 'dark'} mode`}
+              title={`Switch to ${darkMode ? 'light' : 'dark'} mode`}
+            >
+              <Icon name={darkMode ? 'sun' : 'moon'} size={16} />
+            </button>
+          </div>
         </header>
 
         {page === 'benchmark' ? <BenchmarkPage /> : <div className="content" id="overview">

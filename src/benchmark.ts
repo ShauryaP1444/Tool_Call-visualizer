@@ -60,6 +60,7 @@ export type BenchmarkResult = {
     failures: number
     outputTokens: number
     byTool: Record<string, number>
+    records: BenchmarkToolRecord[]
   }
   evaluation: {
     score: number
@@ -70,6 +71,17 @@ export type BenchmarkResult = {
     criticalErrors: BenchmarkCriticalError[]
     assessment: string
   }
+}
+
+export type BenchmarkToolRecord = {
+  id: string
+  name: string
+  arguments: unknown
+  success: boolean | null
+  durationMs: number
+  outputTokens: number
+  outputPreview: string
+  truncated: boolean
 }
 
 export type BenchmarkAggregate = {
@@ -140,5 +152,27 @@ export async function cancelBenchmarkRun(runId: string) {
   if (!response.ok) {
     const body = await response.json() as { error?: string }
     throw new Error(body.error ?? 'Unable to cancel benchmark.')
+  }
+}
+
+export async function loadBenchmarkToolOutput(
+  runId: string,
+  mode: 'regular' | 'summary',
+  toolCallId: string,
+) {
+  const response = await fetch(
+    `/api/benchmarks/runs/${encodeURIComponent(runId)}/tools/${encodeURIComponent(toolCallId)}/output?mode=${encodeURIComponent(mode)}`,
+  )
+  const body = await response.json() as {
+    output?: string
+    outputTokens?: number
+    error?: string
+  }
+  if (!response.ok || typeof body.output !== 'string') {
+    throw new Error(body.error ?? 'Unable to load tool output.')
+  }
+  return {
+    output: body.output,
+    outputTokens: body.outputTokens ?? 0,
   }
 }

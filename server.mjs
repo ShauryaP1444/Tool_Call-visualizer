@@ -326,7 +326,9 @@ async function executeBenchmarkVariant(run, question, mode) {
     failures: 0,
     outputTokens: 0,
     byTool: {},
+    records: [],
   }
+  const toolRecords = new Map()
   const client = new CopilotClient({ workingDirectory: run.repositoryPath })
   await client.start()
   let session
@@ -345,11 +347,33 @@ async function executeBenchmarkVariant(run, question, mode) {
         const name = typeof event.data.toolName === 'string' ? event.data.toolName : 'unknown'
         toolStats.calls += 1
         toolStats.byTool[name] = (toolStats.byTool[name] ?? 0) + 1
+        const record = {
+          id: event.data.toolCallId,
+          name,
+          arguments: event.data.arguments ?? null,
+          success: null,
+          durationMs: 0,
+          outputTokens: 0,
+          outputPreview: '',
+          truncated: false,
+          startedAt: event.timestamp,
+        }
+        toolRecords.set(event.data.toolCallId, record)
+        toolStats.records.push(record)
       }
       if (event.type === 'tool.execution_complete') {
         if (event.data.success === false) toolStats.failures += 1
         const output = extractToolOutput(event.data)
-        toolStats.outputTokens += tokenizer.encode(output).length
+        const record = toolRecords.get(event.data.toolCallId)
+        if (!record) return
+        record.success = event.data.success !== false
+        record.durationMs = new Date(event.timestamp).getTime() - new Date(record.startedAt).getTime()
+        record.truncated = /Output too large to read at once/i.test(output)
+        record.outputPreview = output.slice(0, 500)
+        record.outputTokens = tokenizer.encode(output).length
+        toolStats.outputTokens += record.outputTokens
+        const outputKey = `${mode}:${event.data.toolCallId}`
+        run.toolOutputs.set(outputKey, output)
       }
     })
     const response = await session.sendAndWait({
@@ -436,6 +460,17 @@ function aggregateBenchmarkResults(results) {
   })
 }
 
+function sortBenchmarkResults(results, questionIds) {
+  const questionOrder = new Map(questionIds.map((id, index) => [id, index]))
+  const modeOrder = new Map([['regular', 0], ['summary', 1]])
+  return [...results].sort((left, right) => {
+    const questionDifference = (questionOrder.get(left.questionId) ?? 0)
+      - (questionOrder.get(right.questionId) ?? 0)
+    if (questionDifference) return questionDifference
+    return (modeOrder.get(left.mode) ?? 0) - (modeOrder.get(right.mode) ?? 0)
+  })
+}
+
 async function executeBenchmarkRun(run, questions) {
   run.status = 'running'
   publish(run, 'benchmark.started', {
@@ -443,9 +478,8 @@ async function executeBenchmarkRun(run, questions) {
     questionCount: questions.length,
     modes: run.modes,
   })
-  for (let index = 0; index < questions.length; index += 1) {
-    if (run.status === 'cancelling') break
-    const question = questions[index]
+  await Promise.all(questions.map(async (question, index) => {
+    if (run.status === 'cancelling') return
     publish(run, 'benchmark.question_started', {
       questionId: question.id,
       index,
@@ -453,8 +487,9 @@ async function executeBenchmarkRun(run, questions) {
       question: question.question,
     })
     await Promise.all(run.modes.map((mode) => executeBenchmarkVariant(run, question, mode)))
-  }
+  }))
   run.status = run.status === 'cancelling' ? 'cancelled' : 'completed'
+  run.results = sortBenchmarkResults(run.results, run.questionIds)
   const report = {
     runId: run.id,
     status: run.status,
@@ -646,6 +681,7 @@ const server = createServer(async (request, response) => {
         results: [],
         failures: [],
         report: null,
+        toolOutputs: new Map(),
         events: [],
         subscribers: new Set(),
         activeSessions: new Set(),
@@ -701,6 +737,29 @@ const server = createServer(async (request, response) => {
       runId: run.id,
       status: run.status,
       report: run.report,
+    })
+    return
+  }
+
+  const benchmarkToolOutputMatch = url.pathname.match(
+    /^\/api\/benchmarks\/runs\/([^/]+)\/tools\/([^/]+)\/output$/,
+  )
+  if (request.method === 'GET' && benchmarkToolOutputMatch) {
+    const run = benchmarkRuns.get(benchmarkToolOutputMatch[1])
+    if (!run) {
+      sendJson(response, 404, { error: 'Benchmark run not found.' })
+      return
+    }
+    const mode = url.searchParams.get('mode')
+    const toolCallId = decodeURIComponent(benchmarkToolOutputMatch[2])
+    const output = run.toolOutputs.get(`${mode}:${toolCallId}`)
+    if (typeof output !== 'string') {
+      sendJson(response, 404, { error: 'Tool output is not available.' })
+      return
+    }
+    sendJson(response, 200, {
+      output,
+      outputTokens: tokenizer.encode(output).length,
     })
     return
   }

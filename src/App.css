@@ -41,6 +41,8 @@ main { grid-column: 2; min-width: 0; }
 .live-dot.pulse { animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 7px #e1f4eb22; } }
 .header-actions button, .credit-panel .panel-title button { display: grid; place-items: center; padding: 3px; margin-left: 10px; border: 0; background: transparent; color: #8c8b98; }
+.header-actions .theme-toggle { width: 30px; height: 30px; margin-left: 7px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); transition: color .15s ease, background .15s ease; }
+.header-actions .theme-toggle:hover { color: var(--purple); background: #f3f2fa; }
 .content { width: min(1110px, calc(100% - 68px)); margin: 0 auto; padding: 32px 0 60px; }
 .intro { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 25px; }
 h1, h2 { font-family: Manrope, sans-serif; color: var(--ink); }
@@ -221,6 +223,128 @@ h1 { margin: 0 0 7px; font-size: 25px; letter-spacing: -.65px; }
 .rubric-list p, .critical-list p { margin: 5px 0 0; color: #92919d; font-size: 8px; line-height: 1.45; }
 .critical-list > div.present { border-color: #e6a59c; background: #fff7f5; }
 .critical-list > div.present strong, .benchmark-warning { color: #b34e41; }
+.tool-record-heading { margin-top: 18px !important; }
+.benchmark-tool-records { display: grid; gap: 6px; }
+.benchmark-tool-record { overflow: hidden; border: 1px solid #e8e7ed; border-radius: 7px; background: #fff; }
+.benchmark-tool-record > button { display: grid; grid-template-columns: 1fr 60px 78px 58px; align-items: center; gap: 8px; width: 100%; min-height: 46px; padding: 8px 10px; border: 0; background: transparent; color: #888793; font-size: 8px; text-align: left; }
+.benchmark-tool-record > button:hover, .benchmark-tool-record.expanded > button { background: #f8f8fb; }
+.benchmark-tool-record > button strong, .benchmark-tool-record > button small { display: block; }
+.benchmark-tool-record > button strong { color: #4c4b57; font-size: 9px; }
+.benchmark-tool-record > button small { max-width: 330px; margin-top: 3px; overflow: hidden; color: #9998a5; text-overflow: ellipsis; white-space: nowrap; }
+.benchmark-tool-record > button .success { color: #26845d; }
+.benchmark-tool-record > button .failure { color: #b34e41; }
+.benchmark-tool-output { border-top: 1px solid #e8e7ed; }
+.benchmark-tool-output > p { margin: 0; padding: 11px; color: #858491; font-size: 9px; }
+.benchmark-tool-output pre { max-height: 360px; margin: 0; overflow: auto; padding: 11px; border: 0; border-radius: 0; color: #454451; background: #fff; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 9px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+[data-theme="dark"] {
+  --purple: #948cf0;
+  --ink: #f0eff7;
+  --muted: #aaa8b8;
+  --line: #343341;
+  --panel: #23222c;
+  color: #e4e2ec;
+  background: #18171e;
+}
+[data-theme="dark"] body { background: #18171e; }
+[data-theme="dark"] .sidebar { background: #1d1c24; }
+[data-theme="dark"] .nav-label { color: #777584; }
+[data-theme="dark"] .nav-item { color: #aaa8b7; }
+[data-theme="dark"] .nav-item:hover { color: var(--ink); background: #292832; }
+[data-theme="dark"] .nav-item.active { color: #b6b0ff; background: #302e48; }
+[data-theme="dark"] .usage-widget { background: #24232d; }
+[data-theme="dark"] .usage-track { background: #3a3752; }
+[data-theme="dark"] .usage-widget p,
+[data-theme="dark"] .profile span { color: #8f8d9b; }
+[data-theme="dark"] .usage-widget button { color: #d9d7e1; background: #2b2a35; }
+[data-theme="dark"] .topbar { background: rgba(29,28,36,.88); }
+[data-theme="dark"] .breadcrumb { color: #92909d; }
+[data-theme="dark"] .breadcrumb strong { color: #dedce6; }
+[data-theme="dark"] .header-actions { color: #aaa8b5; }
+[data-theme="dark"] .header-actions .theme-toggle:hover { background: #302e40; }
+[data-theme="dark"] .live-dot { box-shadow: 0 0 0 3px #274839; }
+[data-theme="dark"] .field-grid input,
+[data-theme="dark"] .field-grid select,
+[data-theme="dark"] .wide-field input,
+[data-theme="dark"] .query-row textarea,
+[data-theme="dark"] .benchmark-config input,
+[data-theme="dark"] .benchmark-config select,
+[data-theme="dark"] .benchmark-actions select {
+  border-color: #454351;
+  color: #e4e2eb;
+  background: #292832;
+}
+[data-theme="dark"] .field-grid input:focus,
+[data-theme="dark"] .field-grid select:focus,
+[data-theme="dark"] .wide-field input:focus,
+[data-theme="dark"] .query-row textarea:focus { border-color: #8e87df; box-shadow: 0 0 0 3px #454064; }
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder { color: #7f7d89; }
+[data-theme="dark"] .query-footer kbd { border-color: #494754; color: #aaa8b4; background: #302f39; }
+[data-theme="dark"] .query-footer strong { color: #c1bfca; }
+[data-theme="dark"] .comparison-tabs,
+[data-theme="dark"] .call-detail,
+[data-theme="dark"] .aggregate-card dl div,
+[data-theme="dark"] .result-metric-grid div { background: #1d1c24; }
+[data-theme="dark"] .comparison-tabs button { color: #aaa8b5; }
+[data-theme="dark"] .comparison-tabs button.active { color: #c2bdff; background: #302e48; box-shadow: none; }
+[data-theme="dark"] .stats-grid p,
+[data-theme="dark"] .stats-grid article div > span,
+[data-theme="dark"] .stats-grid .trend em { color: #9694a2; }
+[data-theme="dark"] .stats-grid strong,
+[data-theme="dark"] .aggregate-card > div strong { color: #eceaf2; }
+[data-theme="dark"] .panel-title h2,
+[data-theme="dark"] .benchmark-report-title h2 { color: var(--ink); }
+[data-theme="dark"] .flow-start,
+[data-theme="dark"] .flow-node { border-color: #403e4a; background: #292832; }
+[data-theme="dark"] .flow-start strong,
+[data-theme="dark"] .flow-node strong,
+[data-theme="dark"] .call-detail strong,
+[data-theme="dark"] .tool-cell strong,
+[data-theme="dark"] .usage-row strong,
+[data-theme="dark"] .answer-content { color: #d5d3dd; }
+[data-theme="dark"] .call-output,
+[data-theme="dark"] .benchmark-result-body { background: #1e1d25; }
+[data-theme="dark"] .call-output pre,
+[data-theme="dark"] .table-output pre,
+[data-theme="dark"] .benchmark-result-body pre,
+[data-theme="dark"] .benchmark-tool-output pre { color: #d7d5df; background: #19181f; border-color: #3b3945; }
+[data-theme="dark"] .table-head,
+[data-theme="dark"] .benchmark-run-bar { background: #1e1d25; }
+[data-theme="dark"] .table-entry,
+[data-theme="dark"] .usage-row,
+[data-theme="dark"] .question-row { border-color: #33313d; }
+[data-theme="dark"] .table-entry.selected,
+[data-theme="dark"] .table-row:hover,
+[data-theme="dark"] .question-row:hover,
+[data-theme="dark"] .benchmark-result-header:hover { background: #2a2835; }
+[data-theme="dark"] .table-output > div { border-color: #403e4a; color: #cfccd7; background: #292832; }
+[data-theme="dark"] .donut > div { background: #23222c; }
+[data-theme="dark"] .legend span,
+[data-theme="dark"] .question-row p,
+[data-theme="dark"] .benchmark-result-body > section > p,
+[data-theme="dark"] .rubric-list span,
+[data-theme="dark"] .critical-list span { color: #aaa8b5; }
+[data-theme="dark"] .legend strong,
+[data-theme="dark"] .aggregate-card dd,
+[data-theme="dark"] .benchmark-result-header strong,
+[data-theme="dark"] .benchmark-result-body h3,
+[data-theme="dark"] .benchmark-tool-record > button strong { color: #d8d6df; }
+[data-theme="dark"] .aggregate-card,
+[data-theme="dark"] .benchmark-result,
+[data-theme="dark"] .rubric-list > div,
+[data-theme="dark"] .critical-list > div,
+[data-theme="dark"] .benchmark-tool-record { background: #23222c; border-color: #3c3a46; }
+[data-theme="dark"] .benchmark-actions button,
+[data-theme="dark"] .benchmark-report-title button,
+[data-theme="dark"] .benchmark-run-bar > button:not(.run-button) { border-color: #454351; color: #cbc9d3; background: #292832; }
+[data-theme="dark"] .benchmark-tool-record > button:hover,
+[data-theme="dark"] .benchmark-tool-record.expanded > button { background: #2c2a36; }
+[data-theme="dark"] .benchmark-tool-output,
+[data-theme="dark"] .benchmark-result-body,
+[data-theme="dark"] .rubric-list > div,
+[data-theme="dark"] .critical-list > div { border-color: #3c3a46; }
+[data-theme="dark"] .critical-list > div.present { border-color: #8b4f48; background: #352422; }
 
 @media (max-width: 1000px) {
   .app-shell { grid-template-columns: 76px 1fr; }

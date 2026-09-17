@@ -3,6 +3,7 @@ import {
   cancelBenchmarkRun,
   createBenchmarkRun,
   loadBenchmarkQuestions,
+  loadBenchmarkToolOutput,
   streamBenchmarkRun,
 } from './benchmark'
 import type {
@@ -10,6 +11,7 @@ import type {
   BenchmarkDataset,
   BenchmarkReport,
   BenchmarkResult,
+  BenchmarkToolRecord,
 } from './benchmark'
 import type { AdoMcpConfig } from './api'
 import type { TraceEvent } from './trace'
@@ -44,7 +46,56 @@ function AggregateCard({ aggregate }: { aggregate: BenchmarkAggregate }) {
   )
 }
 
-function ResultCard({ result }: { result: BenchmarkResult }) {
+function ToolRecordRow({
+  runId,
+  mode,
+  record,
+}: {
+  runId: string
+  mode: 'regular' | 'summary'
+  record: BenchmarkToolRecord
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [output, setOutput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+
+  async function toggleOutput() {
+    const nextExpanded = !expanded
+    setExpanded(nextExpanded)
+    if (!nextExpanded || output || loading) return
+    setLoading(true)
+    setError('')
+    try {
+      const loaded = await loadBenchmarkToolOutput(runId, mode, record.id)
+      setOutput(loaded.output)
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className={`benchmark-tool-record ${expanded ? 'expanded' : ''}`}>
+      <button type="button" onClick={() => void toggleOutput()}>
+        <span><strong>{record.name}</strong><small>{JSON.stringify(record.arguments)}</small></span>
+        <span>{formatDuration(record.durationMs)}</span>
+        <span>{record.outputTokens.toLocaleString()} tokens</span>
+        <span className={record.success ? 'success' : 'failure'}>{record.success ? 'completed' : 'failed'}</span>
+      </button>
+      {expanded && (
+        <div className="benchmark-tool-output">
+          {loading && <p>Loading tool output...</p>}
+          {error && <p className="error-banner">{error}</p>}
+          {!loading && !error && <pre>{output || record.outputPreview || 'No output was captured.'}</pre>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ResultCard({ result, runId }: { result: BenchmarkResult; runId: string }) {
   const [expanded, setExpanded] = useState(false)
   return (
     <article className={`benchmark-result ${result.mode}`}>
@@ -97,6 +148,17 @@ function ResultCard({ result }: { result: BenchmarkResult }) {
               <div><dt>Tool failures</dt><dd>{result.toolStats.failures}</dd></div>
               <div><dt>Tool-output tokens</dt><dd>{result.toolStats.outputTokens.toLocaleString()}</dd></div>
             </dl>
+            <h3 className="tool-record-heading">Tool-level record</h3>
+            <div className="benchmark-tool-records">
+              {(result.toolStats.records ?? []).map((record) => (
+                <ToolRecordRow
+                  runId={runId}
+                  mode={result.mode}
+                  record={record}
+                  key={record.id}
+                />
+              ))}
+            </div>
           </section>
         </div>
       )}
@@ -145,10 +207,22 @@ export default function BenchmarkPage() {
     [dataset, topic],
   )
   const results = useMemo(
-    () => events
+    () => {
+      const questionOrder = new Map(
+        (dataset?.questions ?? []).map((question, index) => [question.id, index]),
+      )
+      const modeOrder = new Map([['regular', 0], ['summary', 1]])
+      return events
       .filter((event) => event.type === 'benchmark.variant_completed')
-      .map((event) => event.data as unknown as BenchmarkResult),
-    [events],
+      .map((event) => event.data as unknown as BenchmarkResult)
+      .sort((left, right) => {
+        const questionDifference = (questionOrder.get(left.questionId) ?? 0)
+          - (questionOrder.get(right.questionId) ?? 0)
+        if (questionDifference) return questionDifference
+        return (modeOrder.get(left.mode) ?? 0) - (modeOrder.get(right.mode) ?? 0)
+      })
+    },
+    [dataset, events],
   )
   const report = useMemo(() => {
     const finalEvent = [...events].reverse().find(
@@ -156,10 +230,9 @@ export default function BenchmarkPage() {
     )
     return finalEvent?.data as unknown as BenchmarkReport | undefined
   }, [events])
-  const currentQuestion = useMemo(() => {
-    const event = [...events].reverse().find((item) => item.type === 'benchmark.question_started')
-    return event?.data as { questionId?: string; index?: number; total?: number } | undefined
-  }, [events])
+  const startedQuestions = events.filter((event) => event.type === 'benchmark.question_started').length
+  const completedVariants = results.length
+  const expectedVariants = startedQuestions * (mode === 'compare' ? 2 : 1)
 
   function toggleQuestion(id: string) {
     setSelectedIds((current) => {
@@ -261,7 +334,7 @@ export default function BenchmarkPage() {
           ))}
         </div>
         <div className="benchmark-run-bar">
-          <span>{currentQuestion?.questionId ? `Running ${currentQuestion.questionId} (${(currentQuestion.index ?? 0) + 1}/${currentQuestion.total})` : 'Ready to run'}</span>
+          <span>{active ? `${startedQuestions} questions running in parallel · ${completedVariants}/${expectedVariants} variants complete` : 'Ready to run'}</span>
           {active
             ? <button className="run-button stop-button" type="button" onClick={() => void stopBenchmark()}>Cancel</button>
             : <>
@@ -276,7 +349,7 @@ export default function BenchmarkPage() {
           <div className="benchmark-report-title"><div><h2>Score report</h2><p>Weighted semantic grading; critical errors cap a result at 5/10.</p></div>{report && <button type="button" onClick={() => downloadReport(report)}>Download JSON</button>}</div>
           {report && <div className="aggregate-grid">{report.aggregate.map((aggregate) => <AggregateCard aggregate={aggregate} key={aggregate.mode} />)}</div>}
           <div className="benchmark-results">
-            {results.map((result) => <ResultCard result={result} key={`${result.questionId}-${result.mode}`} />)}
+            {results.map((result) => <ResultCard result={result} runId={runId} key={`${result.questionId}-${result.mode}`} />)}
           </div>
           {report?.failures.map((failure) => <p className="error-banner" key={`${failure.questionId}-${failure.mode}`}>{failure.questionId} · {failure.mode}: {failure.message}</p>)}
         </section>
